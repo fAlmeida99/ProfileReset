@@ -1,0 +1,128 @@
+<#
+.SYNOPSIS
+    ProfileReset - Script de limpeza de perfil para usuários temporários no Windows
+
+.DESCRIPTION
+    Remove arquivos pessoais, dados de cache de aplicativos (Teams, Chrome), arquivos temporários
+    e gera log de auditoria. Ideal para ambientes compartilhados como salas de reunião ou quiosques.
+
+.AUTHOR
+    Felipe Almeida
+
+.VERSION
+    1.0
+#>
+
+# ================================
+# CONFIGURAÇÃO
+# ================================
+
+# Nome do usuário autorizado para execução
+$allowedUser = "Reuniao"
+
+# Diretório para logs
+$logDirectory = "C:\Logs"
+$logFile = Join-Path $logDirectory "ProfileReset_log.txt"
+
+# ================================
+# FUNÇÕES
+# ================================
+
+function Log {
+    param([string]$message)
+    if (!(Test-Path $logDirectory)) {
+        New-Item -Path $logDirectory -ItemType Directory | Out-Null
+    }
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$timestamp] $message"
+}
+
+# ================================
+# VALIDAÇÃO DE USUÁRIO
+# ================================
+
+$currentUser = $env:USERNAME
+if ($currentUser -ne $allowedUser) {
+    Log "Execução bloqueada para o usuário: $currentUser"
+    exit
+}
+
+Log "Iniciando limpeza para o usuário: $currentUser"
+
+# ================================
+# CAMINHO DO PERFIL DO USUÁRIO
+# ================================
+
+$UserProfile = [System.Environment]::GetFolderPath("UserProfile")
+
+# ================================
+# LIMPEZA DE PASTAS PESSOAIS
+# ================================
+
+$foldersToDelete = @("Desktop", "Downloads", "Documents", "Pictures", "Videos", "Music")
+
+foreach ($folder in $foldersToDelete) {
+    $path = Join-Path $UserProfile $folder
+    if (Test-Path $path) {
+        try {
+            Remove-Item "$path\*" -Recurse -Force -ErrorAction Stop
+            Log "Limpeza realizada: $folder"
+        } catch {
+            Log "Erro ao limpar $folder: $_"
+        }
+    }
+}
+
+# ================================
+# LIMPEZA DO MICROSOFT TEAMS
+# ================================
+
+$teamsPath = Join-Path $UserProfile "AppData\Roaming\Microsoft\Teams"
+if (Test-Path $teamsPath) {
+    try {
+        Remove-Item $teamsPath -Recurse -Force -ErrorAction Stop
+        Log "Dados do Teams removidos"
+    } catch {
+        Log "Erro ao limpar Teams: $_"
+    }
+}
+
+# ================================
+# LIMPEZA DO GOOGLE CHROME
+# ================================
+
+$chromePath = Join-Path $UserProfile "AppData\Local\Google\Chrome\User Data"
+if (Test-Path $chromePath) {
+    $chromeItems = @("Cache", "Cookies", "History", "Login Data")
+    foreach ($item in $chromeItems) {
+        $itemPath = Join-Path "$chromePath\Default" $item
+        if (Test-Path $itemPath) {
+            try {
+                Remove-Item $itemPath -Recurse -Force -ErrorAction Stop
+                Log "Chrome: $item removido"
+            } catch {
+                Log "Erro ao remover Chrome $item: $_"
+            }
+        }
+    }
+}
+
+# ================================
+# LIMPEZA DE TEMPORÁRIOS DO USUÁRIO
+# ================================
+
+$tempPath = Join-Path $UserProfile "AppData\Local\Temp"
+if (Test-Path $tempPath) {
+    try {
+        Remove-Item "$tempPath\*" -Recurse -Force -ErrorAction Stop
+        Log "Arquivos temporários removidos"
+    } catch {
+        Log "Erro ao limpar Temp: $_"
+    }
+}
+
+# ================================
+# FINALIZAÇÃO
+# ================================
+
+Log "Limpeza concluída com sucesso para o usuário: $currentUser"
